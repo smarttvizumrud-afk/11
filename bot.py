@@ -1,6 +1,27 @@
-import os, io, chess, chess.pgn, chess.engine, requests, json, time, random
+import os
+import io
+import chess
+import chess.pgn
+import requests
+import json
+import time
+import random
+from threading import Thread
+from flask import Flask
 
-# --- КОНФИГУРАЦИЯ ---
+# --- 1. ФЕЙКОВЫЙ СЕРВЕР ДЛЯ RENDER ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Бот Леонид Жив! Пингуй меня, чтобы я не спал."
+
+def run_web():
+    # Порт 10000 — стандарт для Render
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+# --- 2. НАСТРОЙКИ БОТА ---
 TOKEN = "lip_QfPG2iGVBtUKKNWYVrN1" 
 BOT_ID = "leonidnim"
 SOURCE_ACC = "rehbwf" 
@@ -9,11 +30,10 @@ headers = {"Authorization": f"Bearer {TOKEN}"}
 class LeonidBot:
     def __init__(self):
         self.book = {}
-        self.engine = None
         self.setup()
 
     def setup(self):
-        print("📥 Загрузка базы дебютов...")
+        print("📥 Загрузка базы мастера...")
         try:
             res = requests.get(f"https://lichess.org/api/games/user/{SOURCE_ACC}?max=400")
             if res.status_code == 200:
@@ -27,25 +47,20 @@ class LeonidBot:
                         if fen not in self.book: self.book[fen] = []
                         self.book[fen].append(move.uci())
                         board.push(move)
-                print(f"✅ База готова: {len(self.book)} позиций")
+                print(f"✅ База готова!")
         except:
-            print("⚠️ Ошибка загрузки базы.")
+            print("⚠️ Ошибка базы.")
 
     def get_move(self, board):
-        # 1. Пробуем ход из базы
         fen = board.fen().split()[0]
         if fen in self.book:
             return random.choice(self.book[fen])
-        
-        # 2. Если базы нет, делаем "умный" случайный ход (для стабильности без Stockfish на Render)
-        # На бесплатном Render сложно запустить бинарный Stockfish, 
-        # поэтому пока используем легальные ходы, чтобы бот не вылетал.
-        legal_moves = list(board.legal_moves)
-        return random.choice(legal_moves).uci()
+        # Если ход не в базе, делаем случайный ход (так как Stockfish на Free Render не завести)
+        return random.choice(list(board.legal_moves)).uci()
 
 def start_bot():
     bot = LeonidBot()
-    print(f"🚀 Бот {BOT_ID} ЗАПУЩЕН!")
+    print("🚀 Leonidnim Online и готов к игре!")
     while True:
         try:
             r = requests.get("https://lichess.org/api/stream/event", headers=headers, stream=True, timeout=15)
@@ -58,7 +73,6 @@ def start_bot():
                 
                 elif event['type'] == 'gameStart':
                     game_id = event['game']['id']
-                    print(f"🎮 Игра началась: {game_id}")
                     g_res = requests.get(f"https://lichess.org/api/bot/game/stream/{game_id}", headers=headers, stream=True)
                     my_color = None
                     
@@ -80,9 +94,15 @@ def start_bot():
                             requests.post(f"https://lichess.org/api/bot/game/{game_id}/move/{move}", headers=headers)
                         elif board.is_game_over():
                             break
-        except Exception as e:
-            print(f"♻️ Перезапуск стрима... ({e})")
+        except:
             time.sleep(5)
 
+# --- 3. ЗАПУСК ---
 if __name__ == "__main__":
+    # Запускаем сайт-обманку в отдельном потоке
+    server_thread = Thread(target=run_web)
+    server_thread.daemon = True
+    server_thread.start()
+    
+    # Запускаем самого бота
     start_bot()
