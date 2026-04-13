@@ -1,5 +1,17 @@
 import os, io, chess, chess.pgn, chess.engine, requests, json, time, random
+from threading import Thread
+from flask import Flask # Добавили маленькую библиотеку для "будильника"
 
+# --- 1. МИНИ-СЕРВЕР ДЛЯ БУДИЛЬНИКА ---
+app = Flask('')
+@app.route('/')
+def home():
+    return "Бот Леонид живет здесь!"
+
+def run_web():
+    app.run(host='0.0.0.0', port=8080)
+
+# --- 2. КОД БОТА ---
 TOKEN = "lip_QfPG2iGVBtUKKNWYVrN1" 
 BOT_ID = "leonidnim"
 SOURCE_ACC = "rehbwf" 
@@ -32,8 +44,7 @@ class LeonidBot:
     def get_move(self, board, time_limit):
         fen = board.fen().split()[0]
         if fen in self.book: return random.choice(self.book[fen])
-        think_time = max(0.1, time_limit / 25)
-        return self.engine.play(board, chess.engine.Limit(time=think_time)).move.uci()
+        return self.engine.play(board, chess.engine.Limit(time=max(0.1, time_limit/25))).move.uci()
 
 def start_bot():
     bot = LeonidBot()
@@ -68,4 +79,7 @@ def start_bot():
         except: time.sleep(5)
 
 if __name__ == "__main__":
+    # Запускаем веб-сервер в отдельном потоке
+    Thread(target=run_web).start()
+    # Запускаем бота
     start_bot()
